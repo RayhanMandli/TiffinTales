@@ -96,7 +96,7 @@ export default function Navigation() {
             >
               <ChefHat className="w-6 h-6 text-white" />
             </motion.div>
-            <span className="text-2xl font-bold text-gray-900">MealMate</span>
+            <span className="text-2xl font-bold text-gray-900">Tiffin Tales</span>
           </Link>
 
           {/* Desktop Navigation */}

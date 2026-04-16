@@ -65,7 +65,7 @@ export default function LoginPage() {
               <ChefHat className="w-8 h-8 text-white" />
             </motion.div>
             <CardTitle className="text-2xl font-bold text-gray-900">Welcome Back</CardTitle>
-            <CardDescription className="text-gray-600">Sign in to your MealMate account</CardDescription>
+            <CardDescription className="text-gray-600">Sign in to your account</CardDescription>
           </CardHeader>
 
           <CardContent>

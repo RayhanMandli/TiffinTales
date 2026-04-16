@@ -115,7 +115,7 @@ export default function RegisterPage() {
             >
               <ChefHat className="w-8 h-8 text-white" />
             </motion.div>
-            <CardTitle className="text-2xl font-bold text-gray-900">Join MealMate</CardTitle>
+            <CardTitle className="text-2xl font-bold text-gray-900">Join Tiffin Tales</CardTitle>
             <CardDescription className="text-gray-600">Create your account to get started</CardDescription>
           </CardHeader>
 
