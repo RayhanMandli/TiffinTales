@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useCart } from "@/contexts/CartContext"
 import { useSocket, type TiffinMenu } from "@/contexts/SocketContext"
+import { useAuth } from "@/contexts/AuthContext"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import Link from "next/link"
 import {
   Dialog,
   DialogContent,
@@ -31,6 +33,7 @@ import {
   WifiOff,
   ChevronDown,
   ChevronUp,
+  Package,
 } from "lucide-react"
 
 const containerVariants = {
@@ -308,6 +311,9 @@ function ExtrasModal({
 export default function HomePage() {
   const { addToCart, updateExtras, isInCart, handleMenuUpdate } = useCart()
   const { connected, subscribeToMeal, unsubscribeFromMeal, onMenuUpdate, onMealDeleted } = useSocket()
+  const { user } = useAuth()
+
+  const isProvider = user?.role === "provider"
 
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedType, setSelectedType] = useState("all")
@@ -515,7 +521,44 @@ export default function HomePage() {
         </div>
       </motion.section>
 
-      {/* Location Banner */}
+      {/* Provider Dashboard Prompt — shown instead of browse/cart sections */}
+      {isProvider && (
+        <motion.section
+          className="py-20 bg-white"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          <div className="container mx-auto px-4 text-center">
+            <div className="max-w-md mx-auto">
+              <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <ChefHat className="w-10 h-10 text-orange-500" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-3">Welcome back, Chef! 👨‍🍳</h2>
+              <p className="text-gray-500 mb-6">
+                As a tiffin provider, you manage meals — not order them. Head to your dashboard to manage your listings and track incoming orders.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link href="/chef">
+                  <Button className="bg-orange-500 hover:bg-orange-600 text-white w-full sm:w-auto">
+                    <ChefHat className="w-4 h-4 mr-2" />
+                    Chef Dashboard
+                  </Button>
+                </Link>
+                <Link href="/orders">
+                  <Button variant="outline" className="w-full sm:w-auto">
+                    <Package className="w-4 h-4 mr-2" />
+                    View Orders
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+      )}
+
+      {/* Location Banner — customers only */}
+      {!isProvider && (
       <section className="py-6 bg-orange-50 border-y border-orange-100">
         <div className="container mx-auto px-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -560,8 +603,10 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      )}
 
-      {/* Search & Filter */}
+      {/* Search & Filter — customers only */}
+      {!isProvider && (
       <motion.section className="py-12 bg-gray-50" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ duration: 0.8 }} viewport={{ once: true }}>
         <div className="container mx-auto px-4">
           <motion.div className="max-w-4xl mx-auto" variants={containerVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
@@ -595,8 +640,10 @@ export default function HomePage() {
           </motion.div>
         </div>
       </motion.section>
+      )}
 
-      {/* Tiffins Grid */}
+      {/* Tiffins Grid — customers only */}
+      {!isProvider && (
       <motion.section className="py-16" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ duration: 0.8 }} viewport={{ once: true }}>
         <div className="container mx-auto px-4">
           <AnimatePresence mode="wait">
@@ -639,6 +686,7 @@ export default function HomePage() {
           )}
         </div>
       </motion.section>
+      )}
 
       {/* CTA */}
       <motion.section className="py-20 bg-gradient-to-r from-orange-500 to-red-500 text-white" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ duration: 0.8 }} viewport={{ once: true }}>
@@ -657,13 +705,15 @@ export default function HomePage() {
         </div>
       </motion.section>
 
-      {/* Extras Modal */}
+      {/* Extras Modal — customers only */}
+      {!isProvider && (
       <ExtrasModal
         meal={extrasModal}
         open={!!extrasModal}
         onClose={() => setExtrasModal(null)}
         onConfirm={handleExtrasConfirm}
       />
+      )}
     </div>
   )
 }

@@ -11,7 +11,7 @@ const createAdminUser = async () => {
 
     // Check if admin already exists
     const existingAdmin = await User.findOne({
-      email: "chauhanparth6100@gmail.com",
+      email: "mandli@gmail.com",
     });
 
     if (existingAdmin) {
@@ -43,7 +43,7 @@ const createAdminUser = async () => {
     // Create admin user
     const adminUser = await User.create({
       name: "Admin User",
-      email: "chauhanparth6100@gmail.com",
+      email: "mandli@gmail.com",
       password: hashedPassword,
       role: "admin",
       phone: "9999999999",
@@ -59,7 +59,7 @@ const createAdminUser = async () => {
     });
 
     console.log("\nLogin credentials:");
-    console.log("Email: chauhanparth6100@gmail.com");
+    console.log("Email: mandli@gmail.com");
     console.log("Password: 123456");
   } catch (error) {
     console.error("Error creating admin user:", error.message);
