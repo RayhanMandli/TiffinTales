@@ -14,6 +14,9 @@ router.delete(
   userController.deleteUser
 );
 
+// Location update — must be before /:id to avoid param conflict
+router.put("/location", protect, userController.updateLocation);
+
 // Protected routes
 router.get("/:id", protect, userController.getUserById);
 router.put("/:id", protect, userController.updateUser);

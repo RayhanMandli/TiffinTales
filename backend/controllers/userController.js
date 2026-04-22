@@ -104,6 +104,63 @@ exports.updateProfilePhoto = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Update user location (used by providers to enable nearby-tiffin discovery)
+// @route   PUT /api/users/location
+// @access  Private
+exports.updateLocation = asyncHandler(async (req, res, next) => {
+  const { lat, lng } = req.body;
+
+  if (lat === undefined || lng === undefined) {
+    return next(new ErrorResponse("Please provide lat and lng", 400));
+  }
+
+  const latitude = parseFloat(lat);
+  const longitude = parseFloat(lng);
+
+  if (isNaN(latitude) || isNaN(longitude)) {
+    return next(new ErrorResponse("lat and lng must be valid numbers", 400));
+  }
+
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return next(new ErrorResponse("Invalid coordinates", 400));
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user.id,
+    {
+      location: {
+        type: "Point",
+        coordinates: [longitude, latitude], // GeoJSON is [lng, lat]
+      },
+    },
+    { new: true, runValidators: true }
+  );
+
+  if (!user) {
+    return next(new ErrorResponse("User not found", 404));
+  }
+
+  // If this is a provider, backfill providerLocation on all their meals
+  // so the geospatial index on Meal stays current
+  if (user.role === "provider") {
+    const Meal = require("../models/Meal");
+    await Meal.updateMany(
+      { provider: req.user.id },
+      {
+        providerLocation: {
+          type: "Point",
+          coordinates: [longitude, latitude],
+        },
+      }
+    );
+  }
+
+  res.status(200).json({
+    success: true,
+    data: { location: user.location },
+  });
+});
+
 // @desc    Delete user
 // @route   DELETE /api/users/:id
 // @access  Private/Admin

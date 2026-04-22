@@ -1,7 +1,6 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
-// User Schema
 const UserSchema = new Schema({
   name: {
     type: String,
@@ -40,8 +39,24 @@ const UserSchema = new Schema({
   profilePhoto: {
     type: String,
     default:
-      "https://upload.wikimedia.org/wikipedia/commons/a/ac/Default_pfp.jpg", // Default placeholder image
+      "https://upload.wikimedia.org/wikipedia/commons/a/ac/Default_pfp.jpg",
+  },
+  // GeoJSON Point — used for providers to enable nearby-tiffin queries
+  // Coordinates are [longitude, latitude] (GeoJSON spec)
+  location: {
+    type: {
+      type: String,
+      enum: ["Point"],
+      default: "Point",
+    },
+    coordinates: {
+      type: [Number], // [lng, lat]
+      default: [0, 0],
+    },
   },
 });
+
+// 2dsphere index enables $geoNear and $near queries on provider locations
+UserSchema.index({ location: "2dsphere" });
 
 module.exports = mongoose.model("User", UserSchema);

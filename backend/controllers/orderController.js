@@ -2,17 +2,20 @@ const Order = require("../models/Order");
 const Meal = require("../models/Meal");
 const ErrorResponse = require("../utils/errorResponse");
 const asyncHandler = require("../middleware/async");
-const config = require("../config/config");
 
-// @desc    Get all orders for current user
+// @desc    Get all orders for current user (role-aware)
 // @route   GET /api/orders
 // @access  Private
 exports.getUserOrders = asyncHandler(async (req, res, next) => {
-  // For regular users, only show their orders
-  if (req.user.role === config.roles.CUSTOMER) {
+  const populateFields = [
+    { path: "meal", select: "name price description mealType items photo" },
+  ];
+
+  if (req.user.role === "customer") {
     const orders = await Order.find({ user: req.user.id })
-      .populate("meal", "name price description")
-      .populate("provider", "name");
+      .populate(populateFields)
+      .populate("provider", "name")
+      .sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
@@ -21,11 +24,11 @@ exports.getUserOrders = asyncHandler(async (req, res, next) => {
     });
   }
 
-  // For providers, show orders for their meals
-  if (req.user.role === config.roles.PROVIDER) {
+  if (req.user.role === "provider") {
     const orders = await Order.find({ provider: req.user.id })
-      .populate("meal", "name price description")
-      .populate("user", "name email");
+      .populate(populateFields)
+      .populate("user", "name email phone")
+      .sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
@@ -34,11 +37,12 @@ exports.getUserOrders = asyncHandler(async (req, res, next) => {
     });
   }
 
-  // For admins, show all orders
+  // Admin: all orders
   const orders = await Order.find()
-    .populate("meal", "name price description")
+    .populate(populateFields)
     .populate("user", "name email")
-    .populate("provider", "name");
+    .populate("provider", "name")
+    .sort({ createdAt: -1 });
 
   res.status(200).json({
     success: true,
@@ -52,8 +56,8 @@ exports.getUserOrders = asyncHandler(async (req, res, next) => {
 // @access  Private
 exports.getOrderById = asyncHandler(async (req, res, next) => {
   const order = await Order.findById(req.params.id)
-    .populate("meal", "name price description")
-    .populate("user", "name email")
+    .populate("meal", "name price description mealType items photo")
+    .populate("user", "name email phone")
     .populate("provider", "name");
 
   if (!order) {
@@ -62,11 +66,10 @@ exports.getOrderById = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Make sure user is order owner, provider, or admin
   if (
-    order.user.toString() !== req.user.id &&
-    order.provider.toString() !== req.user.id &&
-    req.user.role !== config.roles.ADMIN
+    order.user._id.toString() !== req.user.id &&
+    order.provider._id.toString() !== req.user.id &&
+    req.user.role !== "admin"
   ) {
     return next(
       new ErrorResponse(
@@ -82,29 +85,65 @@ exports.getOrderById = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Create new order
+// @desc    Create new order (with extra items support)
 // @route   POST /api/orders
 // @access  Private/Customer
 exports.createOrder = asyncHandler(async (req, res, next) => {
-  // Add user to req.body
   req.body.user = req.user.id;
 
-  // Check if meal exists
   const meal = await Meal.findById(req.body.meal);
-
   if (!meal) {
     return next(
       new ErrorResponse(`Meal not found with id of ${req.body.meal}`, 404)
     );
   }
 
-  // Add provider to req.body
-  req.body.provider = meal.user;
+  if (!meal.availability) {
+    return next(new ErrorResponse("This tiffin is currently unavailable", 400));
+  }
 
-  // Set initial status
-  req.body.status = config.orderStatus.PENDING;
+  req.body.provider = meal.provider;
+  req.body.status = "pending";
+
+  // Validate and compute extras cost
+  const extraItems = Array.isArray(req.body.extraItems) ? req.body.extraItems : [];
+  let extrasTotal = 0;
+
+  for (const extra of extraItems) {
+    // Validate extra exists on the meal
+    const validExtra = meal.availableExtras.find((e) => e.name === extra.name);
+    if (!validExtra) {
+      return next(
+        new ErrorResponse(`Extra item "${extra.name}" is not available for this tiffin`, 400)
+      );
+    }
+    if (extra.quantity > validExtra.maxQuantity) {
+      return next(
+        new ErrorResponse(
+          `Maximum ${validExtra.maxQuantity} of "${extra.name}" allowed`,
+          400
+        )
+      );
+    }
+    extra.pricePerUnit = validExtra.price;
+    extrasTotal += validExtra.price * extra.quantity;
+  }
+
+  // Compute and store the definitive total price
+  const quantity = parseInt(req.body.quantity) || 1;
+  req.body.extraItems = extraItems;
+  req.body.totalPrice = meal.price * quantity + extrasTotal;
 
   const order = await Order.create(req.body);
+
+  // Real-time: notify the provider of the new order
+  const io = req.app.get("io");
+  if (io) {
+    io.to(`provider:${meal.provider}`).emit("order:new", {
+      order,
+      message: `New order from customer for ${meal.name}`,
+    });
+  }
 
   res.status(201).json({
     success: true,
@@ -124,10 +163,9 @@ exports.updateOrderStatus = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Make sure user is order provider or admin
   if (
     order.provider.toString() !== req.user.id &&
-    req.user.role !== config.roles.ADMIN
+    req.user.role !== "admin"
   ) {
     return next(
       new ErrorResponse(
@@ -137,22 +175,31 @@ exports.updateOrderStatus = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Validate status
-  if (!Object.values(config.orderStatus).includes(req.body.status)) {
+  const validStatuses = ["pending", "confirmed", "preparing", "ready", "delivered", "cancelled"];
+  if (!validStatuses.includes(req.body.status)) {
     return next(
       new ErrorResponse(`Invalid status value: ${req.body.status}`, 400)
     );
   }
 
-  // Update status
   order = await Order.findByIdAndUpdate(
     req.params.id,
     { status: req.body.status },
-    {
-      new: true,
-      runValidators: true,
-    }
-  );
+    { new: true, runValidators: true }
+  )
+    .populate("meal", "name price mealType")
+    .populate("user", "name email")
+    .populate("provider", "name");
+
+  // Real-time: notify the customer that their order status changed
+  const io = req.app.get("io");
+  if (io) {
+    io.to(`user:${order.user._id}`).emit("order:updated", {
+      orderId: order._id,
+      status: order.status,
+      mealName: order.meal.name,
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -172,11 +219,10 @@ exports.cancelOrder = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Make sure user is order owner, provider, or admin
   if (
     order.user.toString() !== req.user.id &&
     order.provider.toString() !== req.user.id &&
-    req.user.role !== config.roles.ADMIN
+    req.user.role !== "admin"
   ) {
     return next(
       new ErrorResponse(
@@ -186,31 +232,34 @@ exports.cancelOrder = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Only allow cancellation if order is pending or confirmed
-  if (
-    order.status !== config.orderStatus.PENDING &&
-    order.status !== config.orderStatus.CONFIRMED
-  ) {
+  if (!["pending", "confirmed"].includes(order.status)) {
     return next(
       new ErrorResponse(
-        `Order cannot be canceled in ${order.status} status`,
+        `Order cannot be cancelled in "${order.status}" status`,
         400
       )
     );
   }
 
-  // Update status to cancelled
-  await Order.findByIdAndUpdate(
+  const updatedOrder = await Order.findByIdAndUpdate(
     req.params.id,
-    { status: config.orderStatus.CANCELLED },
-    {
-      new: true,
-      runValidators: true,
-    }
+    { status: "cancelled" },
+    { new: true }
   );
+
+  // Notify the other party
+  const io = req.app.get("io");
+  if (io) {
+    io.to(`provider:${order.provider}`).emit("order:cancelled", {
+      orderId: order._id,
+    });
+    io.to(`user:${order.user}`).emit("order:cancelled", {
+      orderId: order._id,
+    });
+  }
 
   res.status(200).json({
     success: true,
-    data: {},
+    data: updatedOrder,
   });
 });

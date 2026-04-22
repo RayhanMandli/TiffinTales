@@ -18,9 +18,12 @@ interface Meal {
   description: string
   price: number
   category: string
+  mealType?: string
   availability: boolean
   user: string
   photo?: string
+  items?: { name: string; quantity: string; isOptional: boolean }[]
+  availableExtras?: { name: string; price: number; maxQuantity: number }[]
   provider: {
     _id: string
     name: string
@@ -98,7 +101,11 @@ export default function MealsPage() {
       _id: meal._id,
       name: meal.name,
       price: meal.price,
+      mealType: meal.mealType || meal.category,
       category: meal.category,
+      items: meal.items || [],
+      availableExtras: meal.availableExtras || [],
+      extraItems: [],
       photo: meal.photo,
       provider: meal.provider,
     })
@@ -134,8 +141,10 @@ export default function MealsPage() {
         body: JSON.stringify({
           meal: meal._id,
           quantity: 1,
+          extraItems: [],
+          totalPrice: meal.price,
           deliveryAddress: user.address,
-          deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
+          deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           specialInstructions: "",
         }),
       })

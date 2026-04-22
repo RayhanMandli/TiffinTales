@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { Plus, ChefHat, DollarSign, Package, Star, Edit, Trash2, Eye, RefreshCw } from "lucide-react"
+import { useSocket } from "@/contexts/SocketContext"
+import { Plus, ChefHat, DollarSign, Package, Star, Edit, Trash2, Eye, RefreshCw, Wifi, WifiOff } from "lucide-react"
 
 interface Meal {
   _id: string
@@ -51,6 +52,7 @@ const statusColors = {
 export default function ChefDashboard() {
   const { user, token } = useAuth()
   const { toast } = useToast()
+  const { connected, onOrderNew } = useSocket()
   const [meals, setMeals] = useState<Meal[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,72 +66,58 @@ export default function ChefDashboard() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
 
+  const fetchMeals = useCallback(async () => {
+    try {
+      // Use server-side filter — avoids the string vs ObjectId comparison bug
+      const response = await fetch(`${API_BASE_URL}/meals/provider/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setMeals(data.data)
+        setStats((prev) => ({ ...prev, totalMeals: data.data.length }))
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to fetch tiffins.", variant: "destructive" })
+    }
+  }, [API_BASE_URL, token, toast])
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/orders`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setOrders(data.data)
+        const totalEarnings = data.data
+          .filter((o: Order) => o.status === "delivered")
+          .reduce((sum: number, o: Order) => sum + o.meal.price * o.quantity, 0)
+        setStats((prev) => ({ ...prev, totalOrders: data.data.length, totalEarnings }))
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to fetch orders.", variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }, [API_BASE_URL, token, toast])
+
   useEffect(() => {
     if (user && token) {
       fetchMeals()
       fetchOrders()
     }
-  }, [user, token])
+  }, [user, token, fetchMeals, fetchOrders])
 
-  // Remove auto-refresh - not needed
+  // Real-time: when a new order arrives, refresh the orders list
+  useEffect(() => {
+    const off = onOrderNew(() => fetchOrders())
+    return off
+  }, [onOrderNew, fetchOrders])
 
-  const fetchMeals = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/meals`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
 
-      if (response.ok) {
-        const data = await response.json()
-        // Filter meals by current user (provider)
-        const userMeals = data.data.filter((meal: any) => meal.user === user?._id)
-        setMeals(userMeals)
-        setStats((prev) => ({ ...prev, totalMeals: userMeals.length }))
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch meals. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }
 
-  const fetchOrders = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/orders`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
 
-      if (response.ok) {
-        const data = await response.json()
-        setOrders(data.data)
-
-        // Calculate earnings
-        const totalEarnings = data.data
-          .filter((order: Order) => order.status === "delivered")
-          .reduce((sum: number, order: Order) => sum + order.meal.price * order.quantity, 0)
-
-        setStats((prev) => ({
-          ...prev,
-          totalOrders: data.data.length,
-          totalEarnings,
-        }))
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch orders. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const updateOrderStatus = async (orderId: string, status: string) => {
     // Add to updating set for loading state
@@ -208,17 +196,12 @@ export default function ChefDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">Chef Dashboard</h1>
-                <p className="text-gray-600">Manage your meals and orders</p>
+                <p className="text-gray-600">Manage your tiffin menus and orders</p>
+                <span className={`inline-flex items-center gap-1 text-xs mt-1 font-medium ${connected ? "text-green-600" : "text-gray-400"}`}>
+                  {connected ? <><Wifi className="w-3 h-3" /> Live order alerts active</> : <><WifiOff className="w-3 h-3" /> Connecting...</>}
+                </span>
               </div>
-
-              <Button
-                variant="outline"
-                onClick={() => {
-                  fetchMeals()
-                  fetchOrders()
-                }}
-                disabled={loading}
-              >
+              <Button variant="outline" onClick={() => { fetchMeals(); fetchOrders() }} disabled={loading}>
                 <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
                 Refresh
               </Button>

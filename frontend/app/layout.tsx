@@ -4,15 +4,16 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { CartProvider } from "@/contexts/CartContext"
+import { SocketProvider } from "@/contexts/SocketContext"
 import { Toaster } from "@/components/ui/toaster"
 import Navigation from "@/components/Navigation"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "MealMate - Homemade Food Delivery",
-  description: "Connect with local home chefs and enjoy fresh, homemade meals delivered to your doorstep",
-    generator: 'v0.dev'
+  title: "TifinTales - Homemade Tiffin Delivery",
+  description: "Discover authentic home-cooked tiffins from local providers delivered fresh to your doorstep",
+  generator: "v0.dev",
 }
 
 export default function RootLayout({
@@ -25,9 +26,11 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           <CartProvider>
-            <Navigation />
-            <main>{children}</main>
-            <Toaster />
+            <SocketProvider>
+              <Navigation />
+              <main>{children}</main>
+              <Toaster />
+            </SocketProvider>
           </CartProvider>
         </AuthProvider>
       </body>
