@@ -292,7 +292,7 @@ function ExtrasModal({
             <span className="text-orange-600">₹{meal.price + extrasTotal}</span>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={onClose} className="flex-1">Skip Extras</Button>
+            <Button variant="outline" onClick={() => onConfirm([])} className="flex-1">Skip Extras</Button>
             <Button onClick={handleConfirm} className="flex-1 bg-orange-500 hover:bg-orange-600">
               <ShoppingCart className="w-4 h-4 mr-2" />
               Add to Cart
@@ -427,11 +427,7 @@ export default function HomePage() {
 
   const handleExtrasConfirm = (extras: { name: string; pricePerUnit: number; quantity: number }[]) => {
     if (!extrasModal) return
-    addToCart({ ...extrasModal, extraItems: [] })
-    if (extras.length > 0) {
-      // updateExtras after add (it's now in cart)
-      setTimeout(() => updateExtras(extrasModal._id, extras), 50)
-    }
+    addToCart({ ...extrasModal, extraItems: extras })
     setExtrasModal(null)
   }
 

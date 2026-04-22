@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { useSocket } from "@/contexts/SocketContext"
-import { Plus, ChefHat, DollarSign, Package, Star, Edit, Trash2, Eye, RefreshCw, Wifi, WifiOff } from "lucide-react"
+import { Plus, ChefHat, DollarSign, Package, Star, Edit, Trash2, Eye, RefreshCw, Wifi, WifiOff, MapPin } from "lucide-react"
 
 interface Meal {
   _id: string
@@ -57,6 +57,7 @@ export default function ChefDashboard() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [updatingOrders, setUpdatingOrders] = useState<Set<string>>(new Set())
+  const [updatingLocation, setUpdatingLocation] = useState(false)
   const [stats, setStats] = useState({
     totalMeals: 0,
     totalOrders: 0,
@@ -115,9 +116,40 @@ export default function ChefDashboard() {
     return off
   }, [onOrderNew, fetchOrders])
 
-
-
-
+  const updateProviderLocation = () => {
+    if (!navigator.geolocation) {
+      toast({ title: "Error", description: "Geolocation is not supported by your browser.", variant: "destructive" })
+      return
+    }
+    setUpdatingLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/users/location`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+          })
+          if (res.ok) {
+            toast({ title: "Location Updated", description: "Your service area has been updated successfully!" })
+          } else {
+            throw new Error("Failed to update location")
+          }
+        } catch (error) {
+          toast({ title: "Error", description: "Failed to update location on the server.", variant: "destructive" })
+        } finally {
+          setUpdatingLocation(false)
+        }
+      },
+      () => {
+        toast({ title: "Permission Denied", description: "Please allow location access to update your service area.", variant: "destructive" })
+        setUpdatingLocation(false)
+      }
+    )
+  }
 
   const updateOrderStatus = async (orderId: string, status: string) => {
     // Add to updating set for loading state
@@ -201,10 +233,16 @@ export default function ChefDashboard() {
                   {connected ? <><Wifi className="w-3 h-3" /> Live order alerts active</> : <><WifiOff className="w-3 h-3" /> Connecting...</>}
                 </span>
               </div>
-              <Button variant="outline" onClick={() => { fetchMeals(); fetchOrders() }} disabled={loading}>
-                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={updateProviderLocation} disabled={updatingLocation} className="text-orange-600 border-orange-200 hover:bg-orange-50">
+                  <MapPin className={`w-4 h-4 mr-2 ${updatingLocation ? "animate-pulse" : ""}`} />
+                  {updatingLocation ? "Updating..." : "Set Location"}
+                </Button>
+                <Button variant="outline" onClick={() => { fetchMeals(); fetchOrders() }} disabled={loading}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
             </div>
           </div>
 
