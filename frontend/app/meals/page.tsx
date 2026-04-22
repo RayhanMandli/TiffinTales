@@ -8,10 +8,16 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useAuth } from "@/contexts/AuthContext"
 import { useCart } from "@/contexts/CartContext"
 import { useToast } from "@/hooks/use-toast"
-import { Search, Heart, ShoppingCart, SlidersHorizontal } from "lucide-react"
+import { Search, Heart, ShoppingCart, SlidersHorizontal, Plus, Minus } from "lucide-react"
 
 interface Meal {
   _id: string
@@ -35,7 +41,7 @@ const categories = ["all", "breakfast", "lunch", "dinner", "snacks", "beverage"]
 
 export default function MealsPage() {
   const { token, user } = useAuth()
-  const { addToCart } = useCart()
+  const { addToCart, updateExtras, isInCart } = useCart()
   const { toast } = useToast()
   const router = useRouter()
   const [meals, setMeals] = useState<Meal[]>([])
@@ -45,6 +51,7 @@ export default function MealsPage() {
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [priceRange, setPriceRange] = useState({ min: 0, max: 1000 })
   const [likedMeals, setLikedMeals] = useState<string[]>([])
+  const [extrasModal, setExtrasModal] = useState<Meal | null>(null)
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
 
@@ -98,18 +105,44 @@ export default function MealsPage() {
   }
 
   const handleAddToCart = (meal: Meal) => {
-    addToCart({
-      _id: meal._id,
-      name: meal.name,
-      price: meal.price,
-      mealType: meal.mealType || meal.category,
-      category: meal.category,
-      items: meal.items || [],
-      availableExtras: meal.availableExtras || [],
-      extraItems: [],
-      photo: meal.photo,
-      provider: meal.provider,
-    })
+    // If the meal has extras, open the modal first
+    if (meal.availableExtras && meal.availableExtras.length > 0) {
+      setExtrasModal(meal)
+    } else {
+      addToCart({
+        _id: meal._id,
+        name: meal.name,
+        price: meal.price,
+        mealType: meal.mealType || meal.category,
+        category: meal.category,
+        items: meal.items || [],
+        availableExtras: [],
+        extraItems: [],
+        photo: meal.photo,
+        provider: meal.provider,
+      })
+    }
+  }
+
+  const handleExtrasConfirm = (extras: { name: string; pricePerUnit: number; quantity: number }[]) => {
+    if (!extrasModal) return
+    if (isInCart(extrasModal._id)) {
+      updateExtras(extrasModal._id, extras)
+    } else {
+      addToCart({
+        _id: extrasModal._id,
+        name: extrasModal.name,
+        price: extrasModal.price,
+        mealType: extrasModal.mealType || extrasModal.category,
+        category: extrasModal.category,
+        items: extrasModal.items || [],
+        availableExtras: extrasModal.availableExtras || [],
+        extraItems: extras,
+        photo: extrasModal.photo,
+        provider: extrasModal.provider,
+      })
+    }
+    setExtrasModal(null)
   }
 
   const orderMeal = async (meal: Meal) => {
@@ -368,6 +401,116 @@ export default function MealsPage() {
 
 
         </motion.div>
+      </div>
+
+      {/* Extras Modal */}
+      <Dialog open={!!extrasModal} onOpenChange={(open) => { if (!open) setExtrasModal(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>🍱 {extrasModal?.name}</DialogTitle>
+          </DialogHeader>
+
+          {extrasModal && (
+            <ExtrasModalContent
+              meal={extrasModal}
+              onConfirm={handleExtrasConfirm}
+              onSkip={() => handleExtrasConfirm([])}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+// ── Extras Modal Content ──────────────────────────────────────────────────────
+function ExtrasModalContent({
+  meal,
+  onConfirm,
+  onSkip,
+}: {
+  meal: { name: string; price: number; items?: { name: string; quantity: string; isOptional: boolean }[]; availableExtras?: { name: string; price: number; maxQuantity: number }[] }
+  onConfirm: (extras: { name: string; pricePerUnit: number; quantity: number }[]) => void
+  onSkip: () => void
+}) {
+  const [selectedExtras, setSelectedExtras] = useState<Record<string, number>>({})
+  const extras = meal.availableExtras || []
+
+  const setQty = (name: string, qty: number, max: number) =>
+    setSelectedExtras((prev) => ({ ...prev, [name]: Math.max(0, Math.min(qty, max)) }))
+
+  const extrasTotal = extras.reduce((sum, e) => sum + e.price * (selectedExtras[e.name] || 0), 0)
+
+  const handleConfirm = () => {
+    const chosen = extras
+      .filter((e) => (selectedExtras[e.name] || 0) > 0)
+      .map((e) => ({ name: e.name, pricePerUnit: e.price, quantity: selectedExtras[e.name] }))
+    onConfirm(chosen)
+  }
+
+  return (
+    <div>
+      {/* Included items */}
+      {meal.items && meal.items.length > 0 && (
+        <div className="mb-4">
+          <p className="text-sm font-semibold text-gray-700 mb-2">Includes:</p>
+          <ul className="grid grid-cols-2 gap-1">
+            {meal.items.map((item, i) => (
+              <li key={i} className="text-sm text-gray-600 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-orange-400 rounded-full" />
+                {item.name} <span className="text-gray-400 text-xs">({item.quantity})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Extras */}
+      {extras.length > 0 && (
+        <div>
+          <p className="text-sm font-semibold text-gray-700 mb-3">Add extras:</p>
+          <div className="space-y-3">
+            {extras.map((extra) => (
+              <div key={extra.name} className="flex items-center justify-between bg-orange-50 rounded-lg px-4 py-3">
+                <div>
+                  <p className="font-medium text-gray-900 text-sm">{extra.name}</p>
+                  <p className="text-orange-600 text-sm font-semibold">+₹{extra.price} each</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setQty(extra.name, (selectedExtras[extra.name] || 0) - 1, extra.maxQuantity)}
+                    className="w-7 h-7 rounded-full bg-white border border-orange-300 flex items-center justify-center hover:bg-orange-100 transition-colors"
+                  >
+                    <Minus className="w-3 h-3 text-orange-600" />
+                  </button>
+                  <span className="w-6 text-center font-semibold text-gray-800">
+                    {selectedExtras[extra.name] || 0}
+                  </span>
+                  <button
+                    onClick={() => setQty(extra.name, (selectedExtras[extra.name] || 0) + 1, extra.maxQuantity)}
+                    className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center hover:bg-orange-600 transition-colors"
+                  >
+                    <Plus className="w-3 h-3 text-white" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="border-t pt-4 mt-4">
+        <div className="flex justify-between font-semibold text-gray-900 mb-4">
+          <span>Total</span>
+          <span className="text-orange-600">₹{meal.price + extrasTotal}</span>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={onSkip} className="flex-1">Skip Extras</Button>
+          <Button onClick={handleConfirm} className="flex-1 bg-orange-500 hover:bg-orange-600">
+            <ShoppingCart className="w-4 h-4 mr-2" />
+            Add to Cart
+          </Button>
+        </div>
       </div>
     </div>
   )
