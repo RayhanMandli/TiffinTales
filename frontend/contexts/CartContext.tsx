@@ -87,10 +87,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCartItems((prev) => {
       const existing = prev.find((i) => i._id === meal._id)
       if (existing) {
+        // If new extras were explicitly provided, replace them; otherwise keep existing
+        const newExtras =
+          meal.extraItems && meal.extraItems.length > 0
+            ? meal.extraItems
+            : existing.extraItems
+        const newQty = existing.quantity + 1
+        const newTotal = computeItemTotal({ price: existing.price, quantity: newQty, extraItems: newExtras })
         toast({ title: "Quantity updated", description: `${meal.name} quantity increased.` })
         return prev.map((i) =>
           i._id === meal._id
-            ? { ...i, quantity: i.quantity + 1, totalPrice: computeItemTotal({ ...i, quantity: i.quantity + 1 }) }
+            ? { ...i, quantity: newQty, extraItems: newExtras, totalPrice: newTotal }
             : i
         )
       }

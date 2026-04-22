@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -262,74 +263,80 @@ export default function MealsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
                   whileHover={{ y: -5, scale: 1.02 }}
+                  className="relative"
                 >
-                  <Card className="overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 border-0 bg-white h-full flex flex-col">
-                    <div className="relative">
-                      <div className="w-full h-48 bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center overflow-hidden">
-                        {meal.photo ? (
-                          <img
-                            src={meal.photo}
-                            alt={meal.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="text-6xl">🍽️</div>
-                        )}
+                  <Card className="overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 border-0 bg-white h-full flex flex-col group cursor-pointer">
+                    {/* Clickable image + info area → navigates to meal detail */}
+                    <Link href={`/meals/${meal._id}`} className="block" id={`meal-card-link-${meal._id}`}>
+                      <div className="relative">
+                        <div className="w-full h-48 bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center overflow-hidden">
+                          {meal.photo ? (
+                            <img
+                              src={meal.photo}
+                              alt={meal.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="text-6xl group-hover:scale-110 transition-transform duration-300">🍽️</div>
+                          )}
+                        </div>
+                        <Badge className="absolute top-4 left-4 bg-orange-500 text-white capitalize">
+                          {meal.category}
+                        </Badge>
                       </div>
-                      <motion.button
-                        className="absolute top-4 right-4 p-2 rounded-full bg-white/90 backdrop-blur-sm shadow-lg"
-                        onClick={() => toggleLike(meal._id)}
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                      >
-                        <Heart
-                          className={`w-5 h-5 transition-colors duration-200 ${
-                            likedMeals.includes(meal._id) ? "text-red-500 fill-red-500" : "text-gray-600"
-                          }`}
-                        />
-                      </motion.button>
-                      <Badge className="absolute top-4 left-4 bg-orange-500 text-white capitalize">
-                        {meal.category}
-                      </Badge>
+
+                      <CardContent className="p-6 pb-3">
+                        <div className="flex justify-between items-start mb-3">
+                          <h3 className="text-xl font-bold text-gray-900 line-clamp-1 flex-1 mr-2 group-hover:text-orange-600 transition-colors duration-200">{meal.name}</h3>
+                          <span className="text-2xl font-bold text-orange-600 whitespace-nowrap">₹{meal.price}</span>
+                        </div>
+                        <p className="text-gray-600 line-clamp-2 text-sm">{meal.description}</p>
+                        <p className="text-sm text-gray-500 mt-2">by {meal.provider.name}</p>
+                      </CardContent>
+                    </Link>
+
+                    {/* Action buttons — outside the link so they don't trigger navigation */}
+                    <div className="px-6 pb-5 mt-auto">
+                      <div className="flex gap-2">
+                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex-1">
+                          <Button
+                            onClick={() => handleAddToCart(meal)}
+                            variant="outline"
+                            className="w-full"
+                            size="sm"
+                            id={`add-to-cart-${meal._id}`}
+                          >
+                            <ShoppingCart className="w-4 h-4 mr-2" />
+                            Add to Cart
+                          </Button>
+                        </motion.div>
+                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex-1">
+                          <Button
+                            onClick={() => orderMeal(meal)}
+                            className="bg-orange-500 hover:bg-orange-600 text-white w-full"
+                            size="sm"
+                            id={`order-now-${meal._id}`}
+                          >
+                            Order Now
+                          </Button>
+                        </motion.div>
+                      </div>
                     </div>
 
-                    <CardContent className="p-6 flex-1 flex flex-col">
-                      <div className="flex justify-between items-start mb-3">
-                        <h3 className="text-xl font-bold text-gray-900 line-clamp-1 flex-1 mr-2">{meal.name}</h3>
-                        <span className="text-2xl font-bold text-orange-600 whitespace-nowrap">₹{meal.price}</span>
-                      </div>
-
-                      <p className="text-gray-600 mb-4 line-clamp-2 flex-1">{meal.description}</p>
-
-                      <div className="mt-auto">
-                        <div className="flex items-center justify-between mb-4">
-                          <span className="text-sm text-gray-600">by {meal.provider.name}</span>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex-1">
-                            <Button
-                              onClick={() => handleAddToCart(meal)}
-                              variant="outline"
-                              className="w-full"
-                              size="sm"
-                            >
-                              <ShoppingCart className="w-4 h-4 mr-2" />
-                              Add to Cart
-                            </Button>
-                          </motion.div>
-                          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex-1">
-                            <Button
-                              onClick={() => orderMeal(meal)}
-                              className="bg-orange-500 hover:bg-orange-600 text-white w-full"
-                              size="sm"
-                            >
-                              Order Now
-                            </Button>
-                          </motion.div>
-                        </div>
-                      </div>
-                    </CardContent>
+                    {/* Like button — floating, outside link */}
+                    <motion.button
+                      className="absolute top-4 right-4 p-2 rounded-full bg-white/90 backdrop-blur-sm shadow-lg z-10"
+                      onClick={(e) => { e.preventDefault(); toggleLike(meal._id) }}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      aria-label="Like meal"
+                    >
+                      <Heart
+                        className={`w-5 h-5 transition-colors duration-200 ${
+                          likedMeals.includes(meal._id) ? "text-red-500 fill-red-500" : "text-gray-600"
+                        }`}
+                      />
+                    </motion.button>
                   </Card>
                 </motion.div>
               ))}

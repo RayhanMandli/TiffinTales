@@ -9,7 +9,9 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { useSocket } from "@/contexts/SocketContext"
-import { Plus, ChefHat, DollarSign, Package, Star, Edit, Trash2, Eye, RefreshCw, Wifi, WifiOff, MapPin } from "lucide-react"
+import { Plus, ChefHat, DollarSign, Package, Star, Edit, Trash2, Eye, RefreshCw, Wifi, WifiOff, MapPin, MessageSquare } from "lucide-react"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface Meal {
   _id: string
@@ -40,6 +42,17 @@ interface Order {
   createdAt: string
 }
 
+interface ProviderReview {
+  _id: string
+  rating: number
+  text: string
+  photos: string[]
+  createdAt: string
+  user: { _id: string; name: string }
+  mealName: string
+  mealId: string
+}
+
 const statusColors = {
   pending: "bg-yellow-100 text-yellow-800",
   confirmed: "bg-blue-100 text-blue-800",
@@ -55,6 +68,8 @@ export default function ChefDashboard() {
   const { connected, onOrderNew } = useSocket()
   const [meals, setMeals] = useState<Meal[]>([])
   const [orders, setOrders] = useState<Order[]>([])
+  const [providerReviews, setProviderReviews] = useState<ProviderReview[]>([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [updatingOrders, setUpdatingOrders] = useState<Set<string>>(new Set())
   const [updatingLocation, setUpdatingLocation] = useState(false)
@@ -62,14 +77,13 @@ export default function ChefDashboard() {
     totalMeals: 0,
     totalOrders: 0,
     totalEarnings: 0,
-    averageRating: 4.8,
+    averageRating: 0,
   })
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
 
   const fetchMeals = useCallback(async () => {
     try {
-      // Use server-side filter — avoids the string vs ObjectId comparison bug
       const response = await fetch(`${API_BASE_URL}/meals/provider/me`, {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -77,11 +91,44 @@ export default function ChefDashboard() {
         const data = await response.json()
         setMeals(data.data)
         setStats((prev) => ({ ...prev, totalMeals: data.data.length }))
+        // Fetch reviews for all meals in parallel
+        fetchProviderReviews(data.data)
       }
     } catch {
       toast({ title: "Error", description: "Failed to fetch tiffins.", variant: "destructive" })
     }
   }, [API_BASE_URL, token, toast])
+
+  const fetchProviderReviews = async (mealList: Meal[]) => {
+    if (!mealList.length) return
+    setReviewsLoading(true)
+    try {
+      const results = await Promise.all(
+        mealList.map((meal) =>
+          fetch(`${API_BASE_URL}/meals/${meal._id}/reviews`)
+            .then((r) => r.json())
+            .then((d) =>
+              (d.data || []).map((rev: any) => ({
+                ...rev,
+                mealName: meal.name,
+                mealId: meal._id,
+              }))
+            )
+            .catch(() => [])
+        )
+      )
+      const all: ProviderReview[] = results.flat().sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+      setProviderReviews(all)
+      if (all.length > 0) {
+        const avg = all.reduce((s, r) => s + r.rating, 0) / all.length
+        setStats((prev) => ({ ...prev, averageRating: Math.round(avg * 10) / 10 }))
+      }
+    } finally {
+      setReviewsLoading(false)
+    }
+  }
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -485,6 +532,140 @@ export default function ChefDashboard() {
               </Card>
             </motion.div>
           </div>
+
+          {/* ── Customer Reviews Panel ─────────────────────────────── */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7 }}
+            className="mt-8"
+          >
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-gradient-to-br from-orange-400 to-amber-500 rounded-xl flex items-center justify-center shadow">
+                      <MessageSquare className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle>Customer Reviews</CardTitle>
+                      <CardDescription>
+                        {providerReviews.length === 0
+                          ? "No reviews yet across your meals"
+                          : `${providerReviews.length} review${providerReviews.length !== 1 ? "s" : ""} across all your meals`}
+                      </CardDescription>
+                    </div>
+                  </div>
+                  {providerReviews.length > 0 && (
+                    <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
+                      <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                      <span className="font-bold text-amber-700 text-sm">
+                        {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : "—"}
+                      </span>
+                      <span className="text-xs text-amber-600">avg</span>
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+
+              <CardContent>
+                {reviewsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm text-gray-400">Loading reviews…</p>
+                    </div>
+                  </div>
+                ) : providerReviews.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-5xl mb-3">⭐</div>
+                    <h3 className="text-base font-semibold text-gray-700 mb-1">No reviews yet</h3>
+                    <p className="text-sm text-gray-400">When customers review your meals, they'll appear here.</p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[520px] pr-3">
+                    <div className="space-y-4">
+                      {providerReviews.map((review, index) => {
+                        const initials = review.user.name
+                          .split(" ")
+                          .map((w: string) => w[0])
+                          .join("")
+                          .toUpperCase()
+                          .slice(0, 2)
+                        const date = new Date(review.createdAt).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })
+                        return (
+                          <motion.div
+                            key={review._id}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.05 * index }}
+                            className="flex gap-4 p-4 rounded-xl border border-gray-100 bg-white hover:shadow-md hover:border-orange-100 transition-all duration-200"
+                          >
+                            {/* Avatar */}
+                            <Avatar className="w-10 h-10 shrink-0 ring-2 ring-orange-100">
+                              <AvatarFallback className="bg-gradient-to-br from-orange-400 to-amber-500 text-white text-sm font-bold">
+                                {initials}
+                              </AvatarFallback>
+                            </Avatar>
+
+                            {/* Body */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <div>
+                                  <p className="font-semibold text-gray-900 text-sm">{review.user.name}</p>
+                                  <p className="text-xs text-gray-400">{date}</p>
+                                </div>
+                                {/* Stars */}
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  {[1, 2, 3, 4, 5].map((s) => (
+                                    <Star
+                                      key={s}
+                                      className={`w-3.5 h-3.5 ${
+                                        s <= review.rating
+                                          ? "fill-amber-400 text-amber-400"
+                                          : "fill-transparent text-gray-200"
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Meal badge */}
+                              <span className="inline-block text-[10px] font-semibold bg-orange-50 text-orange-600 border border-orange-200 px-2 py-0.5 rounded-full mb-2">
+                                🍽️ {review.mealName}
+                              </span>
+
+                              <p className="text-sm text-gray-700 leading-relaxed line-clamp-3">{review.text}</p>
+
+                              {/* Photos */}
+                              {review.photos?.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  {review.photos.map((url, i) => (
+                                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                      <img
+                                        src={url}
+                                        alt={`photo ${i + 1}`}
+                                        className="w-14 h-14 object-cover rounded-lg border border-gray-100 hover:scale-105 transition-transform duration-200"
+                                      />
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
         </motion.div>
       </div>
     </div>

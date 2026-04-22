@@ -48,6 +48,8 @@ interface Order {
   }
   status: string
   quantity: number
+  totalPrice: number
+  extraItems: { name: string; pricePerUnit: number; quantity: number }[]
   deliveryAddress: string
   deliveryDate: string
   specialInstructions?: string
@@ -446,7 +448,7 @@ export default function OrdersPage() {
                             new Date(order.createdAt).toDateString() === new Date().toDateString() &&
                             order.status === "delivered"
                           )
-                          .reduce((sum, order) => sum + (order.meal.price * order.quantity), 0)
+                          .reduce((sum, order) => sum + (order.totalPrice ?? order.meal.price * order.quantity), 0)
                         }
                       </p>
                     </div>
@@ -560,7 +562,7 @@ export default function OrdersPage() {
                       <p className="text-2xl font-bold text-purple-600">
                         ₹{orders
                           .filter(order => order.status === "delivered")
-                          .reduce((sum, order) => sum + (order.meal.price * order.quantity), 0)
+                          .reduce((sum, order) => sum + (order.totalPrice ?? order.meal.price * order.quantity), 0)
                         }
                       </p>
                     </div>
@@ -765,7 +767,7 @@ export default function OrdersPage() {
                       <DollarSign className="w-4 h-4 text-gray-400" />
                       <div>
                         <p className="text-sm text-gray-600">Amount</p>
-                        <p className="font-medium">₹{order.meal.price * order.quantity}</p>
+                        <p className="font-medium">₹{order.totalPrice ?? order.meal.price * order.quantity}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -889,7 +891,7 @@ export default function OrdersPage() {
                       <div>
                         <p className="text-sm text-gray-600">Earnings</p>
                         <p className="font-medium text-green-600">
-                          {order.status === "delivered" ? `₹${order.meal.price * order.quantity}` : "₹0"}
+                          {order.status === "delivered" ? `₹${order.totalPrice ?? order.meal.price * order.quantity}` : "₹0"}
                         </p>
                       </div>
                     </div>

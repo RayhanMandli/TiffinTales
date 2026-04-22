@@ -427,7 +427,12 @@ export default function HomePage() {
 
   const handleExtrasConfirm = (extras: { name: string; pricePerUnit: number; quantity: number }[]) => {
     if (!extrasModal) return
-    addToCart({ ...extrasModal, extraItems: extras })
+    if (isInCart(extrasModal._id)) {
+      // Meal already in cart — update its extras instead of bumping quantity
+      updateExtras(extrasModal._id, extras)
+    } else {
+      addToCart({ ...extrasModal, extraItems: extras })
+    }
     setExtrasModal(null)
   }
 
